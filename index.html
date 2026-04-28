@@ -1683,6 +1683,7 @@ body {
                   <th>Photo</th>
                   <th>Shop Name</th>
                   <th>City</th>
+                  <th>Area</th>
                   <th>Channel</th>
                   <th>Date</th>
                   <th>Submitted By</th>
@@ -1714,8 +1715,36 @@ body {
   <div class="loading-text" id="loading-text">Processing…</div>
 </div>
 
-<!-- HIDDEN CAMERA INPUT -->
-<input type="file" id="camera-input" class="hidden" accept="image/*" capture="environment">
+<!-- HIDDEN CAMERA INPUT (capture only) -->
+<input type="file" id="camera-input-cam" class="hidden" accept="image/*" capture="environment">
+<!-- HIDDEN GALLERY INPUT (no capture attr = allows gallery/drive) -->
+<input type="file" id="camera-input-gallery" class="hidden" accept="image/*">
+
+<!-- PHOTO SOURCE PICKER MODAL -->
+<div id="photo-picker-overlay" style="display:none;position:fixed;inset:0;background:var(--bg-overlay);z-index:300;align-items:flex-end;justify-content:center;backdrop-filter:blur(2px)" onclick="closePhotoPicker()">
+  <div id="photo-picker-sheet" onclick="event.stopPropagation()" style="background:var(--bg-elevated);border-top:1px solid var(--border);border-radius:12px 12px 0 0;padding:20px 20px 32px;width:100%;max-width:480px;box-shadow:0 -8px 32px rgba(0,0,0,0.2)">
+    <div style="width:36px;height:3px;background:var(--border);border-radius:2px;margin:0 auto 20px"></div>
+    <div style="font-size:13px;font-weight:700;color:var(--text-primary);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.5px">Add Photo</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px" id="picker-slot-label"></div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button onclick="pickPhotoSource('camera')" style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;font-family:var(--font);text-align:left;transition:background 0.12s" onmouseover="this.style.background='var(--accent-light)'" onmouseout="this.style.background='var(--bg-surface)'">
+        <span style="font-size:22px">📷</span>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--text-primary)">Take Photo</div>
+          <div style="font-size:11px;color:var(--text-muted)">Open device camera</div>
+        </div>
+      </button>
+      <button onclick="pickPhotoSource('gallery')" style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--bg-surface);border:1px solid var(--border);border-radius:var(--radius-md);cursor:pointer;font-family:var(--font);text-align:left;transition:background 0.12s" onmouseover="this.style.background='var(--accent-light)'" onmouseout="this.style.background='var(--bg-surface)'">
+        <span style="font-size:22px">🖼️</span>
+        <div>
+          <div style="font-size:13px;font-weight:600;color:var(--text-primary)">Choose from Gallery / Drive</div>
+          <div style="font-size:11px;color:var(--text-muted)">Browse files, photos or Google Drive</div>
+        </div>
+      </button>
+      <button onclick="closePhotoPicker()" style="padding:10px;background:transparent;border:1px solid var(--border);border-radius:var(--radius);cursor:pointer;font-family:var(--font);font-size:13px;color:var(--text-muted);margin-top:2px">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // ═══════════════════════════════════════════════════════
@@ -1939,7 +1968,6 @@ function updateConnUI() {
 function buildShopBlock(n) {
   const saved = JSON.parse(localStorage.getItem('hawkspot_shopinfo') || '{}');
   const catOpts = Object.keys(CHANNELS).map(c => `<option${saved.cat===c?' selected':''}>${c}</option>`).join('');
-  const subOpts = buildSubOpts(saved.cat, saved.sub);
   document.getElementById(`shop-block-${n}`).innerHTML = `
     <div class="form-section">
       <div class="form-section-header"><h4>🏪 Shop Information</h4></div>
@@ -1954,14 +1982,14 @@ function buildShopBlock(n) {
             <input type="text" id="si-city-${n}" class="field-input" placeholder="City" value="${saved.city||''}">
           </div>
           <div class="form-group">
-            <label class="field-label">Channel</label>
-            <select id="si-cat-${n}" class="field-select" onchange="updateSubCh(${n})">
-              <option value="">Select…</option>${catOpts}
-            </select>
+            <label class="field-label">Area Name</label>
+            <input type="text" id="si-area-${n}" class="field-input" placeholder="Area / locality" value="${saved.area||''}">
           </div>
           <div class="form-group">
-            <label class="field-label">Sub-Channel</label>
-            <select id="si-sub-${n}" class="field-select">${subOpts}</select>
+            <label class="field-label">Channel</label>
+            <select id="si-cat-${n}" class="field-select">
+              <option value="">Select…</option>${catOpts}
+            </select>
           </div>
           <div class="form-group">
             <label class="field-label">Distributor</label>
@@ -1972,24 +2000,13 @@ function buildShopBlock(n) {
     </div>`;
 }
 
-function buildSubOpts(cat, sel) {
-  const subs = (cat && CHANNELS[cat]) ? CHANNELS[cat] : [];
-  if (!subs.length) return '<option value="">Select channel first…</option>';
-  return subs.map(s=>`<option${sel===s?' selected':''}>${s}</option>`).join('');
-}
-
-function updateSubCh(n) {
-  const cat = document.getElementById(`si-cat-${n}`).value;
-  document.getElementById(`si-sub-${n}`).innerHTML = buildSubOpts(cat,'');
-}
-
 function getShopInfo(n) {
   const shopname = document.getElementById(`si-shopname-${n}`)?.value.trim() || '';
   const city     = document.getElementById(`si-city-${n}`)?.value.trim() || '';
+  const area     = document.getElementById(`si-area-${n}`)?.value.trim() || '';
   const cat      = document.getElementById(`si-cat-${n}`)?.value || '';
-  const sub      = document.getElementById(`si-sub-${n}`)?.value || '';
-  localStorage.setItem('hawkspot_shopinfo', JSON.stringify({shopname,city,cat,sub}));
-  return { shopname, city, channel:cat, subchannel:sub, distributor:profile?.dist||'' };
+  localStorage.setItem('hawkspot_shopinfo', JSON.stringify({shopname,city,area,cat}));
+  return { shopname, city, area, channel:cat, distributor:profile?.dist||'' };
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2037,12 +2054,39 @@ function buildPhotoSlots() {
 }
 
 let activeCaptureSlot = null;
+
 function captureSlot(id) {
   activeCaptureSlot = id;
-  const input = document.getElementById('camera-input');
+  document.getElementById('picker-slot-label').textContent =
+    `Slot ${id}: ${BIC_SLOTS.find(s=>s.id===id)?.label||''}`;
+  const overlay = document.getElementById('photo-picker-overlay');
+  overlay.style.display = 'flex';
+  // Animate sheet up
+  const sheet = document.getElementById('photo-picker-sheet');
+  sheet.style.transform = 'translateY(100%)';
+  requestAnimationFrame(() => {
+    sheet.style.transition = 'transform 0.25s cubic-bezier(0.4,0,0.2,1)';
+    sheet.style.transform = 'translateY(0)';
+  });
+}
+
+function closePhotoPicker() {
+  const overlay = document.getElementById('photo-picker-overlay');
+  const sheet   = document.getElementById('photo-picker-sheet');
+  sheet.style.transform = 'translateY(100%)';
+  setTimeout(() => { overlay.style.display = 'none'; }, 220);
+}
+
+function pickPhotoSource(source) {
+  closePhotoPicker();
+  const id    = activeCaptureSlot;
+  const input = source === 'camera'
+    ? document.getElementById('camera-input-cam')
+    : document.getElementById('camera-input-gallery');
   input.value = '';
   input.onchange = () => onSlotCapture(id, input);
-  input.click();
+  // Small delay so the sheet finishes closing before file picker opens
+  setTimeout(() => input.click(), 260);
 }
 
 function onSlotCapture(id, input) {
@@ -2050,8 +2094,10 @@ function onSlotCapture(id, input) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = e => {
-    slotData[id].dataUrl = e.target.result;
-    slotData[id].kept = false;
+    // Store original full-quality dataUrl — no recompression here
+    slotData[id].dataUrl   = e.target.result;
+    slotData[id].mimeType  = file.type || 'image/jpeg';
+    slotData[id].kept      = false;
     const thumb = document.getElementById(`sthumb-${id}`);
     thumb.src = e.target.result;
     thumb.classList.add('show');
@@ -2065,9 +2111,10 @@ function onSlotCapture(id, input) {
 }
 
 function keepSlot(id) {
-  const d = slotData[id];
+  const d    = slotData[id];
   const note = document.getElementById(`ann-txt-${id}`).value.trim();
   d.note = note;
+
   const finish = (finalUrl) => {
     d.finalDataUrl = finalUrl;
     d.kept = true;
@@ -2077,9 +2124,13 @@ function keepSlot(id) {
     document.getElementById(`ann-row-${id}`).classList.remove('show');
     showToast(`Slot ${id} captured ✓`, 'success');
   };
+
   if (note) {
+    // Burn annotation — canvas preserves original dimensions, output lossless PNG
+    // to avoid double JPEG compression on an already-JPEG source
     burnAnnotation(d.dataUrl, note, d.noteSize, d.noteColor, finish);
   } else {
+    // No annotation — keep the original data URL byte-for-byte, zero re-encoding
     finish(d.dataUrl);
   }
 }
@@ -2098,23 +2149,26 @@ function burnAnnotation(dataUrl, text, size, color, cb) {
   const img = new Image();
   img.onload = () => {
     const c = document.createElement('canvas');
-    c.width = img.width; c.height = img.height;
+    // Preserve exact original pixel dimensions
+    c.width  = img.naturalWidth  || img.width;
+    c.height = img.naturalHeight || img.height;
     const ctx = c.getContext('2d');
-    ctx.drawImage(img,0,0);
-    const fs = { S: img.height*0.03, M: img.height*0.045, L: img.height*0.065 }[size];
-    ctx.font = `bold ${fs}px IBM Plex Sans, sans-serif`;
-    ctx.fillStyle = color;
-    ctx.textAlign = 'right';
+    ctx.drawImage(img, 0, 0, c.width, c.height);
+    const fs = { S: c.height*0.03, M: c.height*0.045, L: c.height*0.065 }[size];
+    ctx.font         = `bold ${fs}px IBM Plex Sans, sans-serif`;
+    ctx.fillStyle    = color;
+    ctx.textAlign    = 'right';
     ctx.textBaseline = 'bottom';
-    const x = img.width - img.width*0.025;
-    const y = img.height - img.height*0.025;
+    const x = c.width  - c.width  * 0.025;
+    const y = c.height - c.height * 0.025;
     if (color !== 'black') {
-      ctx.strokeStyle = 'rgba(0,0,0,0.65)';
-      ctx.lineWidth = fs * 0.1;
+      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+      ctx.lineWidth   = fs * 0.1;
       ctx.strokeText(text, x, y);
     }
     ctx.fillText(text, x, y);
-    cb(c.toDataURL('image/jpeg',0.85));
+    // Output as PNG to avoid JPEG recompression artefacts on annotated images
+    cb(c.toDataURL('image/png'));
   };
   img.src = dataUrl;
 }
@@ -2437,6 +2491,7 @@ function renderAdminTable() {
         <td class="thumb-cell">${thumb?`<img src="${thumb}" alt="">`:''}</td>
         <td style="font-weight:600;color:var(--text-primary)">${s.shop?.shopname||'—'}</td>
         <td>${s.shop?.city||'—'}</td>
+        <td>${s.shop?.area||'—'}</td>
         <td>${s.shop?.channel||'—'}</td>
         <td style="font-family:var(--font-mono);font-size:12px">${new Date(s.timestamp).toLocaleDateString()}</td>
         <td>${s.user||'—'}</td>
@@ -2471,6 +2526,38 @@ function updateAdminSelLabel() {
 // ═══════════════════════════════════════════════════════
 // POWERPOINT EXPORT
 // ═══════════════════════════════════════════════════════
+
+// Returns natural {w, h} of a base64 image (in inches at 96dpi)
+function getImageDimensions(dataUrl) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+    img.onerror = () => resolve({ w: 1, h: 1 });
+    img.src = dataUrl;
+  });
+}
+
+// Fit a box of (imgW × imgH) into a cell of (cellW × cellH) preserving aspect ratio.
+// Returns {x, y, w, h} in inches, centred inside the cell.
+function fitContain(imgW, imgH, cellX, cellY, cellW, cellH) {
+  const imgAR  = imgW / imgH;
+  const cellAR = cellW / cellH;
+  let w, h;
+  if (imgAR >= cellAR) {
+    // Wider than cell — constrain by width
+    w = cellW;
+    h = cellW / imgAR;
+  } else {
+    // Taller than cell — constrain by height
+    h = cellH;
+    w = cellH * imgAR;
+  }
+  // Centre within the cell
+  const x = cellX + (cellW - w) / 2;
+  const y = cellY + (cellH - h) / 2;
+  return { x, y, w, h };
+}
+
 async function exportToPPT() {
   if (typeof window.PptxGenJS === 'undefined') {
     showToast('PptxGenJS not loaded — check internet', 'error'); return;
@@ -2481,52 +2568,93 @@ async function exportToPPT() {
   showLoading('Building PowerPoint…');
   try {
     const pptx = new PptxGenJS();
-    pptx.layout = 'LAYOUT_WIDE';
+    pptx.layout = 'LAYOUT_WIDE'; // 13.33 × 7.5 inches
 
-    // Title Slide
+    // ── Title Slide ──────────────────────────────────────
     const ts = pptx.addSlide();
     ts.background = { color: '0F172A' };
     ts.addShape(pptx.ShapeType.rect, { x:0, y:0, w:0.35, h:7.5, fill:{ color:'4F46E5' } });
     ts.addText('Stands and POS Deployment', { x:0.7, y:1.8, w:12.3, h:1.1, fontSize:36, bold:true, color:'F1F5F9', fontFace:'Calibri', align:'left' });
-    ts.addText('Bunnys Snacks Division', { x:0.7, y:3.0, w:12.3, h:0.6, fontSize:20, color:'6366F1', fontFace:'Calibri', align:'left' });
+    ts.addText('Bunnys Snacks Division',     { x:0.7, y:3.0, w:12.3, h:0.6, fontSize:20, color:'6366F1', fontFace:'Calibri', align:'left' });
     ts.addShape(pptx.ShapeType.line, { x:0.7, y:3.8, w:8, h:0, line:{ color:'334155', width:1 } });
-    ts.addText('Dilawer Hussain', { x:0.7, y:4.1, w:12.3, h:0.5, fontSize:17, bold:true, color:'F1F5F9', fontFace:'Calibri' });
-    ts.addText('Regional Sales Manager — Central Region', { x:0.7, y:4.62, w:12.3, h:0.4, fontSize:12, color:'94A3B8', fontFace:'Calibri' });
-    ts.addText('Bunnys International', { x:0.7, y:5.0, w:12.3, h:0.4, fontSize:12, color:'6366F1', fontFace:'Calibri' });
+    ts.addText('Dilawer Hussain',                          { x:0.7, y:4.1,  w:12.3, h:0.5, fontSize:17, bold:true, color:'F1F5F9', fontFace:'Calibri' });
+    ts.addText('Regional Sales Manager — Central Region',  { x:0.7, y:4.62, w:12.3, h:0.4, fontSize:12, color:'94A3B8', fontFace:'Calibri' });
+    ts.addText('Bunnys International',                     { x:0.7, y:5.0,  w:12.3, h:0.4, fontSize:12, color:'6366F1', fontFace:'Calibri' });
 
-    // Slides per shop
+    // ── One slide per submission ──────────────────────────
     for (const sub of subs) {
       const slide = pptx.addSlide();
       slide.background = { color: 'F8FAFC' };
-      // Header
-      slide.addShape(pptx.ShapeType.rect, { x:0, y:0, w:13.33, h:1.1, fill:{ color:'0F172A' } });
-      slide.addShape(pptx.ShapeType.rect, { x:0, y:0, w:0.2, h:1.1, fill:{ color:'4F46E5' } });
+
+      // Header bar
+      const HEADER_H = 1.05;
+      slide.addShape(pptx.ShapeType.rect, { x:0, y:0, w:13.33, h:HEADER_H, fill:{ color:'0F172A' } });
+      slide.addShape(pptx.ShapeType.rect, { x:0, y:0, w:0.2,   h:HEADER_H, fill:{ color:'4F46E5' } });
+
       const shopName = sub.shop?.shopname || 'Unknown Shop';
-      const area = sub.shop?.subchannel || sub.shop?.channel || '';
-      const city = sub.shop?.city || '';
-      slide.addText(shopName, { x:0.4, y:0.1, w:10, h:0.6, fontSize:22, bold:true, color:'F1F5F9', fontFace:'Calibri' });
-      slide.addText(`${area}${city?' ('+city+')':''}`, { x:0.4, y:0.68, w:10, h:0.32, fontSize:12, color:'94A3B8', fontFace:'Calibri' });
-      slide.addText(`${sub.user} · ${new Date(sub.timestamp).toLocaleDateString()}`, { x:10.5, y:0.35, w:2.6, h:0.3, fontSize:9, color:'64748B', align:'right', fontFace:'Calibri' });
+      const area     = sub.shop?.area     || '';
+      const city     = sub.shop?.city     || '';
+      // Build location string: "Area Name (City)" or whichever is present
+      const locParts = [area, city].filter(Boolean);
+      const locStr   = locParts.length ? `– ${locParts.join(', ')}` : '';
 
-      const photos = Object.entries(sub.data?.photos||{}).filter(([,v])=>v);
-      const count = Math.min(photos.length, 6);
+      slide.addText(shopName, { x:0.4, y:0.1,  w:10, h:0.58, fontSize:22, bold:true, color:'F1F5F9', fontFace:'Calibri' });
+      slide.addText(locStr,   { x:0.4, y:0.65, w:10, h:0.32, fontSize:12, color:'94A3B8', fontFace:'Calibri' });
+      slide.addText(`${sub.user} · ${new Date(sub.timestamp).toLocaleDateString()}`,
+                              { x:10.5, y:0.33, w:2.6, h:0.3, fontSize:9, color:'64748B', align:'right', fontFace:'Calibri' });
+
+      // ── Image layout ──────────────────────────────────
+      const photos = Object.entries(sub.data?.photos||{}).filter(([,v])=>v&&v.startsWith('data:'));
+      const count  = Math.min(photos.length, 6);
       if (!count) continue;
-      const layouts = {1:{c:1,r:1},2:{c:2,r:1},3:{c:3,r:1},4:{c:2,r:2},5:{c:3,r:2},6:{c:3,r:2}};
-      const L = layouts[count];
-      const mg=0.12, sy=1.2, tw=13.33-mg*2, th=7.5-sy-0.2;
-      const cw=(tw-mg*(L.c-1))/L.c, ch=(th-mg*(L.r-1))/L.r;
 
-      for (let i=0; i<count; i++) {
-        const col=i%L.c, row=Math.floor(i/L.c);
-        const x=mg+col*(cw+mg), y=sy+row*(ch+mg);
-        const [slotKey,dataUrl] = photos[i];
-        if (!dataUrl||!dataUrl.startsWith('data:')) continue;
+      // Grid config: cols × rows for each photo count
+      const grids = { 1:{c:1,r:1}, 2:{c:2,r:1}, 3:{c:3,r:1}, 4:{c:2,r:2}, 5:{c:3,r:2}, 6:{c:3,r:2} };
+      const G   = grids[count];
+      const GAP = 0.14; // gap between cells in inches
+      const PAD = 0.14; // outer padding from slide edges
+      const SLIDE_W = 13.33;
+      const SLIDE_H = 7.5;
+      const CONTENT_Y = HEADER_H + PAD;
+      const CONTENT_H = SLIDE_H - CONTENT_Y - PAD;
+      const CONTENT_W = SLIDE_W - PAD * 2;
+
+      // Cell dimensions (the bounding box each image is fitted into)
+      const cellW = (CONTENT_W - GAP * (G.c - 1)) / G.c;
+      const cellH = (CONTENT_H - GAP * (G.r - 1)) / G.r;
+
+      for (let i = 0; i < count; i++) {
+        const col = i % G.c;
+        const row = Math.floor(i / G.c);
+        const cellX = PAD  + col * (cellW + GAP);
+        const cellY = CONTENT_Y + row * (cellH + GAP);
+
+        const [slotKey, dataUrl] = photos[i];
+
+        // Get real pixel dimensions to compute true aspect ratio
+        let dims;
+        try { dims = await getImageDimensions(dataUrl); } catch(e) { dims = {w:4,h:3}; }
+
+        // Fit image inside cell preserving aspect ratio (contain, no crop, no stretch)
+        const placed = fitContain(dims.w, dims.h, cellX, cellY, cellW, cellH);
+
         try {
-          slide.addImage({ data:dataUrl, x, y, w:cw, h:ch, sizing:{type:'contain',w:cw,h:ch} });
-          const slotNum = parseInt(slotKey.replace('slot',''));
-          const slotLabel = BIC_SLOTS.find(s=>s.id===slotNum)?.label||slotKey;
-          slide.addText(slotLabel, { x, y:y+ch-0.22, w:cw, h:0.22, fontSize:8, color:'F1F5F9', fill:{color:'0F172A',transparency:25}, align:'center', fontFace:'Calibri' });
-        } catch(e) { console.warn('Image add failed', slotKey); }
+          // Pass w & h explicitly — do NOT use sizing:{type:'contain'} as that
+          // sometimes ignores the aspect ratio in PptxGenJS; we calculate it ourselves.
+          slide.addImage({ data:dataUrl, x:placed.x, y:placed.y, w:placed.w, h:placed.h });
+
+          // Slot label bar pinned to bottom of the image (not the cell)
+          const LABEL_H = 0.2;
+          const slotNum   = parseInt(slotKey.replace('slot',''));
+          const slotLabel = BIC_SLOTS.find(s=>s.id===slotNum)?.label || slotKey;
+          slide.addText(slotLabel, {
+            x: placed.x, y: placed.y + placed.h - LABEL_H,
+            w: placed.w, h: LABEL_H,
+            fontSize:7, color:'F1F5F9',
+            fill:{ color:'0F172A', transparency:20 },
+            align:'center', fontFace:'Calibri'
+          });
+        } catch(e) { console.warn('Image add failed for', slotKey, e); }
       }
     }
 
